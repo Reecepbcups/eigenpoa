@@ -1,4 +1,8 @@
-# Generated With [Spawn](https://github.com/rollchains/spawn)
+# Eigen PoA
+
+Eigenlayer AVS meets Cosmos-SDK Proof of Authority.
+
+## Generated With [Spawn](https://github.com/rollchains/spawn)
 
 ## Module Scaffolding
 
