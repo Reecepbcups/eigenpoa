@@ -6,7 +6,6 @@ import "cosmos/orm/v1/orm.proto";
 option go_package = "github.com/reecepbcups/eigenpoa/x/avs/types";
 
 // https://github.com/cosmos/cosmos-sdk/blob/main/orm/README.md
-
 message ExampleData {
     option (cosmos.orm.v1.table) = {
       id: 1;

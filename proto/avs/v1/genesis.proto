@@ -12,6 +12,11 @@ message GenesisState {
   Params params = 1 [(gogoproto.nullable) = false];
 }
 
+// Eignlayer AVS Operators
+message Operators {
+  repeated bytes operators = 1;
+}
+
 // Params defines the set of module parameters.
 message Params {
   option (amino.name) = "avs/params";

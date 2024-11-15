@@ -2,6 +2,14 @@
 
 Eigenlayer AVS meets Cosmos-SDK Proof of Authority.
 
+Contract is based off of `https://github.com/Layr-Labs/hello-world-avs` [001dc6e944280559dfb44f75faf5102349a61d8e](https://github.com/Layr-Labs/hello-world-avs/commit/001dc6e944280559dfb44f75faf5102349a61d8e)
+
+```
+git clone git@github.com:Reecepbcups/eigen-poa-avs.git
+```
+
+---
+
 ## Generated With [Spawn](https://github.com/rollchains/spawn)
 
 ## Module Scaffolding

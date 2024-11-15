@@ -10,6 +10,7 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 
 	"cosmossdk.io/client/v2/autocli"
+	"cosmossdk.io/core/appmodule"
 	errorsmod "cosmossdk.io/errors"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -28,9 +29,12 @@ const (
 )
 
 var (
-	_ module.AppModuleBasic   = AppModuleBasic{}
-	_ module.AppModuleGenesis = AppModule{}
-	_ module.AppModule        = AppModule{}
+	_ module.AppModuleBasic     = AppModuleBasic{}
+	_ module.AppModuleGenesis   = AppModule{}
+	_ module.AppModule          = AppModule{}
+	_ appmodule.HasBeginBlocker = AppModule{}
+	_ appmodule.HasEndBlocker   = AppModule{}
+	// _ appmodule.HasPreBlocker   = AppModule{} // this is done directly in the app.go
 
 	_ autocli.HasAutoCLIConfig = AppModule{}
 )
@@ -135,6 +139,16 @@ func (a AppModule) QuerierRoute() string {
 func (a AppModule) RegisterServices(cfg module.Configurator) {
 	types.RegisterMsgServer(cfg.MsgServer(), keeper.NewMsgServerImpl(a.keeper))
 	types.RegisterQueryServer(cfg.QueryServer(), keeper.NewQuerier(a.keeper))
+}
+
+// EndBlock implements appmodule.HasEndBlocker.
+func (am AppModule) EndBlock(ctx context.Context) error {
+	return am.keeper.EndBlocker(ctx)
+}
+
+// BeginBlock implements appmodule.HasBeginBlocker.
+func (am AppModule) BeginBlock(ctx context.Context) error {
+	return am.keeper.BeginBlocker(ctx)
 }
 
 // ConsensusVersion is a sequence number for state-breaking change of the

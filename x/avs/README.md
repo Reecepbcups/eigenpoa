@@ -1,3 +1,2 @@
-# Example Module
+# Eigenlayer AVS
 
-This is a module base generated with [`spawn`](https://github.com/rollchains/spawn).
