@@ -199,7 +199,6 @@ func (k *Keeper) GetOperators(ctx context.Context, ethBlockHeight uint64) ([]sdk
 			return nil, fmt.Errorf("error fetching operator cosmos address: %w", err)
 		}
 
-		// print pairing of eOp to valoper
 		fmt.Printf(" - ETH: %v, Cosmos: %s\n", eOp, valoper.String())
 
 		operators = append(operators, valoper)
@@ -225,34 +224,8 @@ func (k *Keeper) PreBlock(ctx context.Context, req *abci.RequestFinalizeBlock) e
 		for _, valoper := range injectedData.Operators { // TODO: are these eth or valoper
 			fmt.Printf("PreBlock injectedData operator %v\n", valoper.String())
 
-			// cosmos, err := k.EthOperatorToCosmosValoper(ctx, op)
-			// if err != nil {
-			// 	fmt.Printf("Error fetching operator cosmos address %v\n", err)
-			// 	return fmt.Errorf("error fetching operator cosmos address: %w", err)
-			// }
-			// fmt.Printf("PreBlock injectedData operator cosmos %v\n", cosmos)
-
-			// v, err := k.poaKeeper.SetPOAPower(ctx, valoper.String(), 2_000_000)
-			// if err != nil {
-			// 	fmt.Printf("Error setting POA power %v\n", err)
-			// 	return fmt.Errorf("error setting POA power: %w", err)
-			// }
-			// fmt.Printf("PreBlock injectedData operator power %v\n", v)
-
-			// spoof as the POA msgServer
-			// resp, err := poakeeper.NewMsgServerImpl(k.poaKeeper).SetPower(ctx, &poa.MsgSetPower{
-			// 	Sender:           k.poaKeeper.GetAdmin(ctx),
-			// 	ValidatorAddress: valoper.String(),
-			// 	Power:            2_000_000,
-			// 	Unsafe:           false,
-			// })
-			// fmt.Printf("PreBlock injectedData operator power %v | %v\n", resp, err)
-			// if err != nil {
-			// 	fmt.Printf("Error setting POA power %v\n", err)
-			// 	return fmt.Errorf("error setting POA power: %w", err)
-			// }
-
 			// TODO: set the power on the next beginblock, the Comet/SDK does not like it here
+			// TODO: this may have actually just been a npe, try moving that logic back here and see what happens (from the beginblock)
 			err := k.pendingApplyChanges.Set(ctx, valoper.String(), 2_000_000)
 			if err != nil {
 				fmt.Printf("Error setting pendingApplyChanges %v\n", err)

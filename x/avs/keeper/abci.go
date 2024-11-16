@@ -28,7 +28,6 @@ func (keeper *Keeper) BeginBlocker(ctx context.Context) error {
 
 		fmt.Println("-- BeginBlocker pendingApplyChanges", k, v)
 
-		// convert k to sdk.ValAddress
 		addr, err := sdk.ValAddressFromBech32(string(k))
 		if err != nil {
 			return fmt.Errorf("failed to convert key to sdk.ValAddress: %w", err)
@@ -38,7 +37,6 @@ func (keeper *Keeper) BeginBlocker(ctx context.Context) error {
 		fmt.Printf("BeginBlocker injectedData operator power %v | %v\n", vals, err)
 	}
 
-	// iter rm and remove them
 	for _, k := range rm {
 		err := keeper.pendingApplyChanges.Remove(ctx, k)
 		if err != nil {
