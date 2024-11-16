@@ -10,36 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	abci "github.com/cometbft/cometbft/abci/types"
-	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
-	dbm "github.com/cosmos/cosmos-db"
-	"github.com/cosmos/gogoproto/proto"
-	"github.com/cosmos/ibc-go/modules/capability"
-	capabilitykeeper "github.com/cosmos/ibc-go/modules/capability/keeper"
-	capabilitytypes "github.com/cosmos/ibc-go/modules/capability/types"
-	ica "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts"
-	icacontroller "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/controller"
-	icacontrollerkeeper "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/controller/keeper"
-	icacontrollertypes "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/controller/types"
-	icahost "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/host"
-	icahostkeeper "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/host/keeper"
-	icahosttypes "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/host/types"
-	icatypes "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/types"
-	ibcfee "github.com/cosmos/ibc-go/v8/modules/apps/29-fee"
-	ibcfeekeeper "github.com/cosmos/ibc-go/v8/modules/apps/29-fee/keeper"
-	ibcfeetypes "github.com/cosmos/ibc-go/v8/modules/apps/29-fee/types"
-	"github.com/cosmos/ibc-go/v8/modules/apps/transfer"
-	ibctransferkeeper "github.com/cosmos/ibc-go/v8/modules/apps/transfer/keeper"
-	ibctransfertypes "github.com/cosmos/ibc-go/v8/modules/apps/transfer/types"
-	ibc "github.com/cosmos/ibc-go/v8/modules/core"
-	ibcclienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types" //nolint:staticcheck
-	ibcconnectiontypes "github.com/cosmos/ibc-go/v8/modules/core/03-connection/types"
-	porttypes "github.com/cosmos/ibc-go/v8/modules/core/05-port/types"
-	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
-	ibckeeper "github.com/cosmos/ibc-go/v8/modules/core/keeper"
-	ibctm "github.com/cosmos/ibc-go/v8/modules/light-clients/07-tendermint"
-	"github.com/spf13/cast"
-
 	autocliv1 "cosmossdk.io/api/cosmos/autocli/v1"
 	reflectionv1 "cosmossdk.io/api/cosmos/reflection/v1"
 	"cosmossdk.io/client/v2/autocli"
@@ -62,7 +32,12 @@ import (
 	"cosmossdk.io/x/upgrade"
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
 	upgradetypes "cosmossdk.io/x/upgrade/types"
-
+	"github.com/CosmWasm/wasmd/x/wasm"
+	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
+	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
+	abci "github.com/cometbft/cometbft/abci/types"
+	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -107,11 +82,12 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/crisis"
 	crisiskeeper "github.com/cosmos/cosmos-sdk/x/crisis/keeper"
 	crisistypes "github.com/cosmos/cosmos-sdk/x/crisis/types"
-
+	distr "github.com/cosmos/cosmos-sdk/x/distribution"
 	distrkeeper "github.com/cosmos/cosmos-sdk/x/distribution/keeper"
 	distrtypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
 	"github.com/cosmos/cosmos-sdk/x/genutil"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
+	"github.com/cosmos/cosmos-sdk/x/gov"
 	govkeeper "github.com/cosmos/cosmos-sdk/x/gov/keeper"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	govv1beta1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1beta1"
@@ -128,30 +104,48 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/slashing"
 	slashingkeeper "github.com/cosmos/cosmos-sdk/x/slashing/keeper"
 	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
-
+	"github.com/cosmos/cosmos-sdk/x/staking"
 	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
-
-	"github.com/CosmWasm/wasmd/x/wasm"
-	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
-	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
-
+	"github.com/cosmos/gogoproto/proto"
+	"github.com/cosmos/ibc-apps/middleware/packet-forward-middleware/v8/packetforward"
+	packetforwardkeeper "github.com/cosmos/ibc-apps/middleware/packet-forward-middleware/v8/packetforward/keeper"
+	packetforwardtypes "github.com/cosmos/ibc-apps/middleware/packet-forward-middleware/v8/packetforward/types"
+	"github.com/cosmos/ibc-go/modules/capability"
+	capabilitykeeper "github.com/cosmos/ibc-go/modules/capability/keeper"
+	capabilitytypes "github.com/cosmos/ibc-go/modules/capability/types"
+	ica "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts"
+	icacontroller "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/controller"
+	icacontrollerkeeper "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/controller/keeper"
+	icacontrollertypes "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/controller/types"
+	icahost "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/host"
+	icahostkeeper "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/host/keeper"
+	icahosttypes "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/host/types"
+	icatypes "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/types"
+	ibcfee "github.com/cosmos/ibc-go/v8/modules/apps/29-fee"
+	ibcfeekeeper "github.com/cosmos/ibc-go/v8/modules/apps/29-fee/keeper"
+	ibcfeetypes "github.com/cosmos/ibc-go/v8/modules/apps/29-fee/types"
+	"github.com/cosmos/ibc-go/v8/modules/apps/transfer"
+	ibctransferkeeper "github.com/cosmos/ibc-go/v8/modules/apps/transfer/keeper"
+	ibctransfertypes "github.com/cosmos/ibc-go/v8/modules/apps/transfer/types"
+	ibc "github.com/cosmos/ibc-go/v8/modules/core"
+	ibcclienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types" //nolint:staticcheck
+	ibcconnectiontypes "github.com/cosmos/ibc-go/v8/modules/core/03-connection/types"
+	porttypes "github.com/cosmos/ibc-go/v8/modules/core/05-port/types"
+	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
+	ibckeeper "github.com/cosmos/ibc-go/v8/modules/core/keeper"
+	ibctm "github.com/cosmos/ibc-go/v8/modules/light-clients/07-tendermint"
+	avs "github.com/reecepbcups/eigenpoa/x/avs"
+	avskeeper "github.com/reecepbcups/eigenpoa/x/avs/keeper"
+	avstypes "github.com/reecepbcups/eigenpoa/x/avs/types"
+	"github.com/spf13/cast"
+	poa "github.com/strangelove-ventures/poa"
+	poakeeper "github.com/strangelove-ventures/poa/keeper"
+	poamodule "github.com/strangelove-ventures/poa/module"
 	tokenfactory "github.com/strangelove-ventures/tokenfactory/x/tokenfactory"
 	tokenfactorybindings "github.com/strangelove-ventures/tokenfactory/x/tokenfactory/bindings"
 	tokenfactorykeeper "github.com/strangelove-ventures/tokenfactory/x/tokenfactory/keeper"
 	tokenfactorytypes "github.com/strangelove-ventures/tokenfactory/x/tokenfactory/types"
-
-	poa "github.com/strangelove-ventures/poa"
-	poakeeper "github.com/strangelove-ventures/poa/keeper"
-	poamodule "github.com/strangelove-ventures/poa/module"
-
-	"github.com/cosmos/ibc-apps/middleware/packet-forward-middleware/v8/packetforward"
-	packetforwardkeeper "github.com/cosmos/ibc-apps/middleware/packet-forward-middleware/v8/packetforward/keeper"
-	packetforwardtypes "github.com/cosmos/ibc-apps/middleware/packet-forward-middleware/v8/packetforward/types"
-
-	distr "github.com/cosmos/cosmos-sdk/x/distribution"
-	"github.com/cosmos/cosmos-sdk/x/gov"
-	"github.com/cosmos/cosmos-sdk/x/staking"
 )
 
 const (
@@ -265,6 +259,7 @@ type ChainApp struct {
 	ScopedTransferKeeper      capabilitykeeper.ScopedKeeper
 	ScopedIBCFeeKeeper        capabilitykeeper.ScopedKeeper
 	ScopedWasmKeeper          capabilitykeeper.ScopedKeeper
+	AvsKeeper                 avskeeper.Keeper
 
 	// the module manager
 	ModuleManager      *module.Manager
@@ -342,7 +337,7 @@ func NewChainApp(
 	// }
 	// baseAppOptions = append(baseAppOptions, voteExtOp)
 
-	baseAppOptions = append(baseAppOptions, baseapp.SetOptimisticExecution())
+	// baseAppOptions = append(baseAppOptions, baseapp.SetOptimisticExecution())
 
 	bApp := baseapp.NewBaseApp(appName, logger, db, txConfig.TxDecoder(), baseAppOptions...)
 	bApp.SetCommitMultiStoreTracer(traceStore)
@@ -379,6 +374,7 @@ func NewChainApp(
 		tokenfactorytypes.StoreKey,
 		poa.StoreKey,
 		packetforwardtypes.StoreKey,
+		avstypes.StoreKey,
 	)
 
 	tkeys := storetypes.NewTransientStoreKeys(paramstypes.TStoreKey)
@@ -624,6 +620,16 @@ func NewChainApp(
 	// If evidence needs to be handled for the app, set routes in router here and seal
 	app.EvidenceKeeper = *evidenceKeeper
 
+	// Create the avs Keeper
+	app.AvsKeeper = avskeeper.NewKeeper(
+		appCodec,
+		runtime.NewKVStoreService(keys[avstypes.StoreKey]),
+		app.StakingKeeper,
+		&app.POAKeeper,
+		logger,
+		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
+	)
+
 	// Create the tokenfactory keeper
 	app.TokenFactoryKeeper = tokenfactorykeeper.NewKeeper(
 		appCodec,
@@ -792,6 +798,20 @@ func NewChainApp(
 	// we prefer to be more strict in what arguments the modules expect.
 	skipGenesisInvariants := cast.ToBool(appOpts.Get(crisis.FlagSkipGenesisInvariants))
 
+	// AVS proposal handling
+	defaultProposalHandler := baseapp.NewDefaultProposalHandler(bApp.Mempool(), bApp)
+	avsProposalHandler := avskeeper.NewAVSProposalHandler(
+		&app.AvsKeeper,
+		defaultProposalHandler.PrepareProposalHandler(),
+		defaultProposalHandler.ProcessProposalHandler(),
+	)
+
+	bApp.SetExtendVoteHandler(avsProposalHandler.ExtendVoteHandler())
+	bApp.SetVerifyVoteExtensionHandler(avsProposalHandler.VerifyVoteExtensionHandler())
+
+	bApp.SetPrepareProposal(avsProposalHandler.PrepareProposal)
+	bApp.SetProcessProposal(avsProposalHandler.ProcessProposal)
+
 	// NOTE: Any module instantiated in the module manager that is later modified
 	// must be passed by reference here.
 	app.ModuleManager = module.NewManager(
@@ -838,6 +858,7 @@ func NewChainApp(
 		tokenfactory.NewAppModule(app.TokenFactoryKeeper, app.AccountKeeper, app.BankKeeper, app.GetSubspace(tokenfactorytypes.ModuleName)),
 		poamodule.NewAppModule(appCodec, app.POAKeeper),
 		packetforward.NewAppModule(app.PacketForwardKeeper, app.GetSubspace(packetforwardtypes.ModuleName)),
+		avs.NewAppModule(appCodec, app.AvsKeeper),
 	)
 
 	// BasicModuleManager defines the module BasicManager is in charge of setting up basic,
@@ -879,6 +900,7 @@ func NewChainApp(
 		wasmtypes.ModuleName,
 		tokenfactorytypes.ModuleName,
 		packetforwardtypes.ModuleName,
+		avstypes.ModuleName,
 	)
 
 	app.ModuleManager.SetOrderEndBlockers(
@@ -898,6 +920,7 @@ func NewChainApp(
 		wasmtypes.ModuleName,
 		tokenfactorytypes.ModuleName,
 		packetforwardtypes.ModuleName,
+		avstypes.ModuleName,
 	)
 
 	// NOTE: The genutils module must occur after staking so that pools are
@@ -939,6 +962,7 @@ func NewChainApp(
 		poa.ModuleName,
 		tokenfactorytypes.ModuleName,
 		packetforwardtypes.ModuleName,
+		avstypes.ModuleName,
 	}
 	app.ModuleManager.SetOrderInitGenesis(genesisModuleOrder...)
 	app.ModuleManager.SetOrderExportGenesis(genesisModuleOrder...)
@@ -1110,7 +1134,11 @@ func (app *ChainApp) setPostHandler() {
 func (app *ChainApp) Name() string { return app.BaseApp.Name() }
 
 // PreBlocker application updates every pre block
-func (app *ChainApp) PreBlocker(ctx sdk.Context, _ *abci.RequestFinalizeBlock) (*sdk.ResponsePreBlock, error) {
+func (app *ChainApp) PreBlocker(ctx sdk.Context, req *abci.RequestFinalizeBlock) (*sdk.ResponsePreBlock, error) {
+	if err := app.AvsKeeper.PreBlock(ctx, req); err != nil {
+		return nil, err
+	}
+
 	return app.ModuleManager.PreBlock(ctx)
 }
 
@@ -1339,6 +1367,7 @@ func initParamsKeeper(appCodec codec.BinaryCodec, legacyAmino *codec.LegacyAmino
 	paramsKeeper.Subspace(tokenfactorytypes.ModuleName)
 	paramsKeeper.Subspace(poa.ModuleName)
 	paramsKeeper.Subspace(packetforwardtypes.ModuleName).WithKeyTable(packetforwardtypes.ParamKeyTable())
+	paramsKeeper.Subspace(avstypes.ModuleName)
 
 	return paramsKeeper
 }

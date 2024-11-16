@@ -95,6 +95,8 @@ from_scratch () {
   update_test_genesis `printf '.app_state["staking"]["params"]["bond_denom"]="%s"' $DENOM`
   update_test_genesis '.app_state["staking"]["params"]["min_commission_rate"]="0.050000000000000000"'
 
+  update_test_genesis '.consensus["params"]["abci"]["vote_extensions_enable_height"]="10"'
+
   # mint
   update_test_genesis `printf '.app_state["mint"]["params"]["mint_denom"]="%s"' $DENOM`
 
