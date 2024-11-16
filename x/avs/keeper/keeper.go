@@ -215,7 +215,12 @@ func (k *Keeper) PreBlock(ctx context.Context, req *abci.RequestFinalizeBlock) e
 
 	injectedData := getInjectedData(req.Txs)
 	if injectedData != nil {
-		fmt.Println("PreBlock injectedData", injectedData, "TODO: put the POA logic here :D") // TODO:
+		if len(injectedData.Operators) == 0 {
+			fmt.Println("PreBlock no operators found, skipping")
+			return nil
+		}
+
+		fmt.Println("PreBlock injectedData", injectedData) // TODO:
 
 		for _, valoper := range injectedData.Operators { // TODO: are these eth or valoper
 			fmt.Printf("PreBlock injectedData operator %v\n", valoper.String())

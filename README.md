@@ -14,8 +14,7 @@ cd eigen-poa-avs
 npm run extract:abis # to the ./abis dir
 
 cd ..
-abigen --abi=./eigen-poa-avs/abis/HelloWorldServiceManager.json --pkg=manager --out=./x/avs/keeper/manager/HelloWorldServiceManager.go  # TODO: how to do others as well?
-abigen --abi=./eigen-poa-avs/abis/ECDSAStakeRegistry.json --pkg=stake_registry --out=./x/avs/keeper/stake_registry/ECDSAStakeRegistry.go  # TODO: how to do others as well?
+abigen --abi=./eigen-poa-avs/abis/HelloWorldServiceManager.json --pkg=manager --out=./x/avs/keeper/manager/HelloWorldServiceManager.go
 
 ```
 
