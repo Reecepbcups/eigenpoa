@@ -88,20 +88,19 @@ func (a AVSProposalHandler) ExtendVoteHandler() sdk.ExtendVoteHandler {
 			return nil, errors.New("no operators found")
 		}
 
-		// ve := VoteExtension{
-		// 	Height:    req.Height,
-		// 	EthHeight: ethBlockHeight,
-		// 	Operators: operators,
-		// }
-		// fmt.Println("ExtendVoteHandler VoteExtension", ve)
+		ve := VoteExtension{
+			Height:    req.Height,
+			EthHeight: ethBlockHeight,
+			Operators: operators,
+		}
+		fmt.Println("ExtendVoteHandler VoteExtension", ve)
 
-		// bz, err := json.Marshal(ve)
-		// if err != nil {
-		// 	return nil, fmt.Errorf("failed to marshal vote extension: %w", err)
-		// }
+		bz, err := json.Marshal(ve)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal vote extension: %w", err)
+		}
 
-		// return &abci.ResponseExtendVote{VoteExtension: bz}, nil
-		return &abci.ResponseExtendVote{VoteExtension: nil}, nil
+		return &abci.ResponseExtendVote{VoteExtension: bz}, nil
 	}
 }
 

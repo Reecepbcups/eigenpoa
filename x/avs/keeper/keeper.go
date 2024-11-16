@@ -11,7 +11,6 @@ import (
 	"github.com/Layr-Labs/incredible-squaring-avs/core/chainio"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,6 +20,7 @@ import (
 	"cosmossdk.io/log"
 	"cosmossdk.io/orm/model/ormdb"
 	abci "github.com/cometbft/cometbft/abci/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 
@@ -151,26 +151,6 @@ func (k *Keeper) ExportGenesis(ctx context.Context) *types.GenesisState {
 	}
 }
 
-func getOperators(contract *bind.BoundContract, opts *bind.CallOpts, _ uint64) ([]common.Address, error) {
-	// quorumNumbers := eigentypes.QuorumNums{0} // TODO: what is this?
-
-	// cast call 0xf5059a5d33d5853360d16c683c16e67980206f36 "getOperators()(address[])"
-
-	var out []interface{}
-	// err := contract.Call(opts, &out, "getOperatorState", registryCoordinator, quorumNumbers, height) // original
-	err := contract.Call(opts, &out, "getOperators") // TODO: the cast works, but not the go bind call. need to play around with
-	if err != nil {
-		return *new([]common.Address), err
-	}
-
-	fmt.Println("out0", out[0])
-
-	out0 := *abi.ConvertType(out[0], new([]common.Address)).(*[]common.Address)
-	// print out0
-	fmt.Println("out0", out0)
-	return out0, err
-}
-
 func (k *Keeper) GetOperators(ctx context.Context, ethBlockHeight uint64) ([][]byte, error) {
 
 	address := common.HexToAddress("0xf5059a5d33d5853360d16c683c16e67980206f36") // set in state, gather on setup
@@ -207,7 +187,8 @@ func (k *Keeper) GetOperators(ctx context.Context, ethBlockHeight uint64) ([][]b
 	// 	return nil, fmt.Errorf("error reading abi: %w", err)
 	// }
 
-	ops, err := m.GetOperators(opts)
+	ethOperators, err := m.GetOperators(opts)
+	fmt.Println("ETH OPERATORS", ethOperators, err)
 	if err != nil {
 		fmt.Printf("Error fetching operators %v\n", err)
 		return nil, fmt.Errorf("error fetching operators: %w", err)
@@ -219,8 +200,6 @@ func (k *Keeper) GetOperators(ctx context.Context, ethBlockHeight uint64) ([][]b
 	// v, err := getOperators(b, opts, ethBlockHeight)
 
 	// k.EthAvs.GetOperatorsStakeInQuorumsAtBlock // ideally we use this but too confusing how to setup for me rn. (EthAvs config)
-
-	fmt.Println("OPERATORS", ops, err)
 
 	operatorStakes := []string{}
 	// operatorStakes, err := k.EthAvs.GetOperatorsStakeInQuorumsAtBlock(&bind.CallOpts{Context: ctx}, quorumNumbers, uint32(ethBlockHeight))
@@ -235,9 +214,23 @@ func (k *Keeper) GetOperators(ctx context.Context, ethBlockHeight uint64) ([][]b
 	// }
 
 	operators := make([][]byte, 0, len(operatorStakes))
-	// for _, operator := range operatorStakes {
-	// 	operators = append(operators, operator[0].Operator.Bytes())
-	// }
+	for _, eOp := range ethOperators {
+		// operators = append(operators, operator[0].Operator.Bytes())
+		valoper, err := m.GetOperatorCosmosAddress(opts, eOp)
+		if err != nil {
+			fmt.Printf("Error fetching operator cosmos address %v\n", err)
+			return nil, fmt.Errorf("error fetching operator cosmos address: %w", err)
+		}
+
+		// convert valoper to bytes
+		addr, err := sdk.ValAddressFromBech32(valoper) // TODO: convert to addresscodec
+		if err != nil {
+			fmt.Printf("Error converting valoper to bytes %v\n", err)
+			return nil, fmt.Errorf("error converting valoper to bytes: %w", err)
+		}
+
+		operators = append(operators, addr)
+	}
 	return operators, nil
 }
 
