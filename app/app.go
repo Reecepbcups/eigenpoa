@@ -337,7 +337,7 @@ func NewChainApp(
 	// }
 	// baseAppOptions = append(baseAppOptions, voteExtOp)
 
-	baseAppOptions = append(baseAppOptions, baseapp.SetOptimisticExecution())
+	// baseAppOptions = append(baseAppOptions, baseapp.SetOptimisticExecution())
 
 	bApp := baseapp.NewBaseApp(appName, logger, db, txConfig.TxDecoder(), baseAppOptions...)
 	bApp.SetCommitMultiStoreTracer(traceStore)
@@ -625,6 +625,7 @@ func NewChainApp(
 		appCodec,
 		runtime.NewKVStoreService(keys[avstypes.StoreKey]),
 		app.StakingKeeper,
+		&app.POAKeeper,
 		logger,
 		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
 	)

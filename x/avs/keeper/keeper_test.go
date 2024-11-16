@@ -3,6 +3,7 @@ package keeper_test
 import (
 	"testing"
 
+	poakeeper "github.com/strangelove-ventures/poa/keeper"
 	"github.com/stretchr/testify/suite"
 
 	"cosmossdk.io/log"
@@ -50,6 +51,7 @@ type testFixture struct {
 	accountkeeper authkeeper.AccountKeeper
 	bankkeeper    bankkeeper.BaseKeeper
 	stakingKeeper *stakingkeeper.Keeper
+	poaKeeper     *poakeeper.Keeper
 	mintkeeper    mintkeeper.Keeper
 
 	addrs      []sdk.AccAddress
@@ -74,7 +76,7 @@ func SetupTest(t *testing.T) *testFixture {
 	registerBaseSDKModules(logger, f, encCfg, keys)
 
 	// Setup Keeper.
-	f.k = keeper.NewKeeper(encCfg.Codec, runtime.NewKVStoreService(keys[types.ModuleName]), f.stakingKeeper, logger, f.govModAddr)
+	f.k = keeper.NewKeeper(encCfg.Codec, runtime.NewKVStoreService(keys[types.ModuleName]), f.stakingKeeper, f.poaKeeper, logger, f.govModAddr)
 	f.msgServer = keeper.NewMsgServerImpl(f.k)
 	f.queryServer = keeper.NewQuerier(f.k)
 	f.appModule = module.NewAppModule(encCfg.Codec, f.k)
@@ -123,6 +125,8 @@ func registerBaseSDKModules(
 		authcodec.NewBech32Codec(sdk.Bech32PrefixValAddr),
 		authcodec.NewBech32Codec(sdk.Bech32PrefixConsAddr),
 	)
+
+	f.poaKeeper = &poakeeper.Keeper{} // TODO:
 
 	// Mint Keeper.
 	f.mintkeeper = mintkeeper.NewKeeper(

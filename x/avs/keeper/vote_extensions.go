@@ -37,11 +37,11 @@ type (
 		Height    int64
 		EthHeight uint64
 		// TODO: instead of actually doing this, I remember some hash mechanism was used instead? this way if no updates no update.
-		Operators [][]byte
+		Operators []sdk.ValAddress
 	}
 
 	InjectedVoteExtension struct {
-		Operators          [][]byte
+		Operators          []sdk.ValAddress
 		ExtendedCommitInfo abci.ExtendedCommitInfo
 	}
 )
@@ -75,7 +75,7 @@ func (a AVSProposalHandler) ExtendVoteHandler() sdk.ExtendVoteHandler {
 		}
 		fmt.Println("ethBlockHeight", ethBlockHeight)
 
-		var operators = make([][]byte, 0)
+		var operators = make([]sdk.ValAddress, 0)
 		if ethBlockHeight > 0 {
 			operators, err = a.keeper.GetOperators(ctx, ethBlockHeight)
 			if err != nil {
@@ -93,7 +93,7 @@ func (a AVSProposalHandler) ExtendVoteHandler() sdk.ExtendVoteHandler {
 			EthHeight: ethBlockHeight,
 			Operators: operators,
 		}
-		fmt.Println("ExtendVoteHandler VoteExtension", ve)
+		// fmt.Println("ExtendVoteHandler VoteExtension", ve)
 
 		bz, err := json.Marshal(ve)
 		if err != nil {
@@ -187,7 +187,7 @@ func (a AVSProposalHandler) ProcessProposal(ctx sdk.Context, req *abci.RequestPr
 	return a.processProposalHandler(ctx, req)
 }
 
-func computeFinalizedOperators(_ sdk.Context, ci abci.ExtendedCommitInfo) ([][]byte, error) {
+func computeFinalizedOperators(_ sdk.Context, ci abci.ExtendedCommitInfo) ([]sdk.ValAddress, error) {
 	// TODO: some check to see how many validators voted to have an operator added. If someone votes for an operator that should NOT be in here, punish in some way?
 	operators := make(map[string]struct{})
 	for _, v := range ci.Votes {
@@ -213,10 +213,10 @@ func computeFinalizedOperators(_ sdk.Context, ci abci.ExtendedCommitInfo) ([][]b
 	}
 
 	// convert back to bytes after map string sorting for uniques
-	operatorsBz := make([][]byte, 0, len(operators))
+	sdkOperators := make([]sdk.ValAddress, 0, len(operators))
 	for operator := range operators {
-		operatorsBz = append(operatorsBz, []byte(operator))
+		sdkOperators = append(sdkOperators, []byte(operator))
 	}
 
-	return operatorsBz, nil
+	return sdkOperators, nil
 }

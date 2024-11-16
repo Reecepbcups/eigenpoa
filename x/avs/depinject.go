@@ -18,6 +18,7 @@ import (
 
 	modulev1 "github.com/reecepbcups/eigenpoa/api/avs/module/v1"
 	"github.com/reecepbcups/eigenpoa/x/avs/keeper"
+	poakeeper "github.com/strangelove-ventures/poa/keeper"
 )
 
 var _ appmodule.AppModule = AppModule{}
@@ -44,6 +45,7 @@ type ModuleInputs struct {
 
 	StakingKeeper  stakingkeeper.Keeper
 	SlashingKeeper slashingkeeper.Keeper
+	POAKeeper      *poakeeper.Keeper
 }
 
 type ModuleOutputs struct {
@@ -56,7 +58,7 @@ type ModuleOutputs struct {
 func ProvideModule(in ModuleInputs) ModuleOutputs {
 	govAddr := authtypes.NewModuleAddress(govtypes.ModuleName).String()
 
-	k := keeper.NewKeeper(in.Cdc, in.StoreService, in.StakingKeeper, log.NewLogger(os.Stderr), govAddr)
+	k := keeper.NewKeeper(in.Cdc, in.StoreService, in.StakingKeeper, in.POAKeeper, log.NewLogger(os.Stderr), govAddr)
 	m := NewAppModule(in.Cdc, k)
 
 	return ModuleOutputs{Module: m, Keeper: k, Out: depinject.Out{}}

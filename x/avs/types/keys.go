@@ -8,7 +8,8 @@ import (
 
 var (
 	// ParamsKey saves the current module params.
-	ParamsKey = collections.NewPrefix(0)
+	ParamsKey              = collections.NewPrefix(0)
+	PendingApplyChangesKey = collections.NewPrefix(1)
 )
 
 const (

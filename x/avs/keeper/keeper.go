@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	sdkavsregistry "github.com/Layr-Labs/eigensdk-go/chainio/clients/avsregistry"
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/eth"
 	rpccalls "github.com/Layr-Labs/eigensdk-go/metrics/collectors/rpc_calls"
 	"github.com/Layr-Labs/incredible-squaring-avs/core/chainio"
@@ -23,6 +22,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	poakeeper "github.com/strangelove-ventures/poa/keeper"
 
 	apiv1 "github.com/reecepbcups/eigenpoa/api/avs/v1"
 	"github.com/reecepbcups/eigenpoa/x/avs/keeper/manager"
@@ -37,6 +37,12 @@ type Keeper struct {
 	Eth    *eth.InstrumentedClient
 	EthAvs *chainio.AvsReader // not used
 
+	poaKeeper *poakeeper.Keeper
+
+	m *manager.Manager // the PoA <> AVS manager
+
+	pendingApplyChanges collections.Map[string, uint64] // sdk.ValAddress -> uint64
+
 	// state management
 	Schema   collections.Schema
 	Params   collections.Item[types.Params]
@@ -46,23 +52,12 @@ type Keeper struct {
 	authority string
 }
 
-type Config struct {
-	ChainReader     sdkavsregistry.ChainReader
-	ServiceBindings *chainio.AvsManagersBindings
-}
-
-func NewConfig() *Config {
-	return &Config{
-		// ChainReader: sdkavsregistry.NewChainReader(),
-	}
-
-}
-
 // NewKeeper creates a new Keeper instance
 func NewKeeper(
 	cdc codec.BinaryCodec,
 	storeService storetypes.KVStoreService,
 	valStore baseapp.ValidatorStore,
+	poaKeeper *poakeeper.Keeper,
 	logger log.Logger,
 	authority string,
 ) Keeper {
@@ -106,11 +101,14 @@ func NewKeeper(
 		logger:   logger,
 		valStore: valStore,
 
+		poaKeeper: poaKeeper,
+
 		Eth: eth,
 		// EthAvs: ethAvs,
 
-		Params: collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
-		OrmDB:  store,
+		Params:              collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
+		OrmDB:               store,
+		pendingApplyChanges: collections.NewMap(sb, types.PendingApplyChangesKey, "pending_apply", collections.StringKey, collections.Uint64Value),
 
 		authority: authority,
 	}
@@ -122,11 +120,22 @@ func NewKeeper(
 
 	k.Schema = schema
 
+	// TODO: set via params
+	k.m, err = manager.NewManager(common.HexToAddress("0xf5059a5d33d5853360d16c683c16e67980206f36"), k.Eth)
+	if err != nil {
+		fmt.Printf("Error creating manager %v\n", err)
+		panic(err)
+	}
+
 	return k
 }
 
 func (k Keeper) Logger() log.Logger {
 	return k.logger
+}
+
+func (k Keeper) GetPOAKeeper() *poakeeper.Keeper {
+	return k.poaKeeper
 }
 
 // InitGenesis initializes the module's state from a genesis state.
@@ -151,94 +160,102 @@ func (k *Keeper) ExportGenesis(ctx context.Context) *types.GenesisState {
 	}
 }
 
-func (k *Keeper) GetOperators(ctx context.Context, ethBlockHeight uint64) ([][]byte, error) {
+func (k *Keeper) EthOperatorToCosmosValoper(ctx context.Context, e common.Address) (sdk.ValAddress, error) {
+	opts := &bind.CallOpts{Context: context.Background()}
 
-	address := common.HexToAddress("0xf5059a5d33d5853360d16c683c16e67980206f36") // set in state, gather on setup
-	// instance, err := stake_registry.NewStakeRegistry(address, k.Eth)
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	m, err := manager.NewManager(address, k.Eth)
+	valoper, err := k.m.GetOperatorCosmosAddress(opts, e)
 	if err != nil {
-		fmt.Printf("Error creating manager %v\n", err)
-		return nil, fmt.Errorf("error creating manager: %w", err)
+		fmt.Printf("Error fetching operator cosmos address %v\n", err)
+		return nil, fmt.Errorf("error fetching operator cosmos address: %w", err)
 	}
 
-	// TODO: I need to get all... how plz
-	// weight, err := instance.GetOperatorWeightAtBlock(, common.HexToAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"), uint32(ethBlockHeight))
-	// if err != nil {
-	// 	fmt.Printf("Error fetching operator weight %v\n", err)
-	// 	return nil, fmt.Errorf("error fetching operator weight: %w", err)
-	// }
+	addr, err := sdk.ValAddressFromBech32(valoper) // TODO: use addresscodec instead
+	if err != nil {
+		fmt.Printf("Error converting valoper to bytes %v\n", err)
+		return nil, fmt.Errorf("error converting valoper to bytes: %w", err)
+	}
 
-	// instance.GetOperators
+	return addr, nil
+}
 
-	// read from operatorStateRetriever
-
+// Gets ETH Operators validator addresses mapped to the SDK
+func (k *Keeper) GetOperators(ctx context.Context, ethBlockHeight uint64) ([]sdk.ValAddress, error) {
 	opts := &bind.CallOpts{Context: ctx}
-	// registryCoordinatorAddr := ""
 
-	// read from escaped sequence manager.ManagerMetaData.ABI
-	// r := strings.NewReader(manager.ManagerMetaData.ABI)
-	// contractABI, err := abi.JSON(r)
-	// if err != nil {
-	// 	fmt.Printf("Error reading abi %v\n", err)
-	// 	return nil, fmt.Errorf("error reading abi: %w", err)
-	// }
+	// TODO: set in state params (if none, ignore and log)
+	// TODO: is really the HelloWorldServiceManager for now
 
-	ethOperators, err := m.GetOperators(opts)
-	fmt.Println("ETH OPERATORS", ethOperators, err)
+	ethOperators, err := k.m.GetOperators(opts)
 	if err != nil {
-		fmt.Printf("Error fetching operators %v\n", err)
-		return nil, fmt.Errorf("error fetching operators: %w", err)
+		fmt.Printf("Error fetching ETH operators %v\n", err)
+		return nil, fmt.Errorf("error fetching ETH operators: %w", err)
 	}
 
-	// address common.Address, abi abi.ABI, caller ContractCaller, transactor ContractTransactor, filterer ContractFilterer
-	// b := bind.NewBoundContract(address, contractABI, m., m.ManagerTransactor, m.ManagerFilterer)
-
-	// v, err := getOperators(b, opts, ethBlockHeight)
-
-	// k.EthAvs.GetOperatorsStakeInQuorumsAtBlock // ideally we use this but too confusing how to setup for me rn. (EthAvs config)
-
-	operatorStakes := []string{}
-	// operatorStakes, err := k.EthAvs.GetOperatorsStakeInQuorumsAtBlock(&bind.CallOpts{Context: ctx}, quorumNumbers, uint32(ethBlockHeight))
-	// operatorStakes, err := k.EthAvs.GetOperatorsStakeInQuorumsAtBlock(&bind.CallOpts{Context: ctx}, quorumNumbers, uint32(ethBlockHeight))
-	// if err != nil {
-	// 	fmt.Printf("Error fetching operator stake %v\n", err)
-	// 	return nil, fmt.Errorf("error fetching operator stake: %w", err)
-	// }
-
-	// if len(operatorStakes) == 0 {
-	// 	return nil, fmt.Errorf("no operators found")
-	// }
-
-	operators := make([][]byte, 0, len(operatorStakes))
+	operators := make([]sdk.ValAddress, 0, len(ethOperators))
 	for _, eOp := range ethOperators {
-		// operators = append(operators, operator[0].Operator.Bytes())
-		valoper, err := m.GetOperatorCosmosAddress(opts, eOp)
+		valoper, err := k.EthOperatorToCosmosValoper(ctx, eOp)
 		if err != nil {
 			fmt.Printf("Error fetching operator cosmos address %v\n", err)
 			return nil, fmt.Errorf("error fetching operator cosmos address: %w", err)
 		}
 
-		// convert valoper to bytes
-		addr, err := sdk.ValAddressFromBech32(valoper) // TODO: convert to addresscodec
-		if err != nil {
-			fmt.Printf("Error converting valoper to bytes %v\n", err)
-			return nil, fmt.Errorf("error converting valoper to bytes: %w", err)
-		}
+		// print pairing of eOp to valoper
+		fmt.Printf(" - ETH: %v, Cosmos: %s\n", eOp, valoper.String())
 
-		operators = append(operators, addr)
+		operators = append(operators, valoper)
 	}
 	return operators, nil
 }
 
 // This request does not match the sdk's checked PreBlocker interface (why??) so we have to manually impl this in the app PreBlocker.
-func (k *Keeper) PreBlock(_ context.Context, req *abci.RequestFinalizeBlock) error {
+func (k *Keeper) PreBlock(ctx context.Context, req *abci.RequestFinalizeBlock) error {
+	if req == nil {
+		return nil
+	}
+
 	injectedData := getInjectedData(req.Txs)
 	if injectedData != nil {
 		fmt.Println("PreBlock injectedData", injectedData, "TODO: put the POA logic here :D") // TODO:
+
+		for _, valoper := range injectedData.Operators { // TODO: are these eth or valoper
+			fmt.Printf("PreBlock injectedData operator %v\n", valoper.String())
+
+			// cosmos, err := k.EthOperatorToCosmosValoper(ctx, op)
+			// if err != nil {
+			// 	fmt.Printf("Error fetching operator cosmos address %v\n", err)
+			// 	return fmt.Errorf("error fetching operator cosmos address: %w", err)
+			// }
+			// fmt.Printf("PreBlock injectedData operator cosmos %v\n", cosmos)
+
+			// v, err := k.poaKeeper.SetPOAPower(ctx, valoper.String(), 2_000_000)
+			// if err != nil {
+			// 	fmt.Printf("Error setting POA power %v\n", err)
+			// 	return fmt.Errorf("error setting POA power: %w", err)
+			// }
+			// fmt.Printf("PreBlock injectedData operator power %v\n", v)
+
+			// spoof as the POA msgServer
+			// resp, err := poakeeper.NewMsgServerImpl(k.poaKeeper).SetPower(ctx, &poa.MsgSetPower{
+			// 	Sender:           k.poaKeeper.GetAdmin(ctx),
+			// 	ValidatorAddress: valoper.String(),
+			// 	Power:            2_000_000,
+			// 	Unsafe:           false,
+			// })
+			// fmt.Printf("PreBlock injectedData operator power %v | %v\n", resp, err)
+			// if err != nil {
+			// 	fmt.Printf("Error setting POA power %v\n", err)
+			// 	return fmt.Errorf("error setting POA power: %w", err)
+			// }
+
+			// TODO: set the power on the next beginblock, the Comet/SDK does not like it here
+			err := k.pendingApplyChanges.Set(ctx, valoper.String(), 2_000_000)
+			if err != nil {
+				fmt.Printf("Error setting pendingApplyChanges %v\n", err)
+				return fmt.Errorf("error setting pendingApplyChanges: %w", err)
+			}
+
+		}
+
 	}
 	return nil
 }
