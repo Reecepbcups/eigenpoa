@@ -7,7 +7,6 @@ import (
 
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/eth"
 	rpccalls "github.com/Layr-Labs/eigensdk-go/metrics/collectors/rpc_calls"
-	"github.com/Layr-Labs/incredible-squaring-avs/core/chainio"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -34,8 +33,7 @@ type Keeper struct {
 
 	logger log.Logger
 
-	Eth    *eth.InstrumentedClient
-	EthAvs *chainio.AvsReader // not used
+	Eth *eth.InstrumentedClient
 
 	poaKeeper *poakeeper.Keeper
 
@@ -79,6 +77,7 @@ func NewKeeper(
 		panic(err)
 	}
 
+	// Setup ETH client
 	reg := prometheus.NewRegistry()
 	rpcCallsCollector := rpccalls.NewCollector("ethHttp", reg) // TODO: POA?
 	eth, err := eth.NewInstrumentedClient("http://127.0.0.1:8545", rpcCallsCollector)
@@ -86,7 +85,7 @@ func NewKeeper(
 		panic(err)
 	}
 
-	// I have to use the incredible-squaring-avs/ repo only i think?
+	// TODO: I have to use the incredible-squaring-avs/ repo only i think? (probably fine with how I have it now though)
 	// l, err := logging.NewZapLogger(logging.Development)
 	// if err != nil {
 	// 	panic(err)
@@ -104,7 +103,6 @@ func NewKeeper(
 		poaKeeper: poaKeeper,
 
 		Eth: eth,
-		// EthAvs: ethAvs,
 
 		Params:              collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 		OrmDB:               store,
