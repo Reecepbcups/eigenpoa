@@ -804,6 +804,10 @@ func NewChainApp(
 		defaultProposalHandler.PrepareProposalHandler(),
 		defaultProposalHandler.ProcessProposalHandler(),
 	)
+
+	bApp.SetExtendVoteHandler(avsProposalHandler.ExtendVoteHandler())
+	bApp.SetVerifyVoteExtensionHandler(avsProposalHandler.VerifyVoteExtensionHandler())
+
 	bApp.SetPrepareProposal(avsProposalHandler.PrepareProposal)
 	bApp.SetProcessProposal(avsProposalHandler.ProcessProposal)
 

@@ -4,8 +4,19 @@ Eigenlayer AVS meets Cosmos-SDK Proof of Authority.
 
 Contract is based off of `https://github.com/Layr-Labs/hello-world-avs` [001dc6e944280559dfb44f75faf5102349a61d8e](https://github.com/Layr-Labs/hello-world-avs/commit/001dc6e944280559dfb44f75faf5102349a61d8e)
 
-```
+```bash
 git clone git@github.com:Reecepbcups/eigen-poa-avs.git
+
+# https://goethereumbook.org/smart-contract-compile/
+# https://goethereumbook.org/en/block-query/
+
+cd eigen-poa-avs
+npm run extract:abis # to the ./abis dir
+
+cd ..
+abigen --abi=./eigen-poa-avs/abis/HelloWorldServiceManager.json --pkg=manager --out=./x/avs/keeper/manager/HelloWorldServiceManager.go  # TODO: how to do others as well?
+abigen --abi=./eigen-poa-avs/abis/ECDSAStakeRegistry.json --pkg=stake_registry --out=./x/avs/keeper/stake_registry/ECDSAStakeRegistry.go  # TODO: how to do others as well?
+
 ```
 
 ---

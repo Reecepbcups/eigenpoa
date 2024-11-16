@@ -46,57 +46,90 @@ type (
 	}
 )
 
-func (a AVSProposalHandler) ExtendVoteHandler(ctx sdk.Context, req *abci.RequestExtendVote) (*abci.ResponseExtendVote, error) {
-	ethBlockHeight, err := a.keeper.Eth.BlockNumber(ctx)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println("ethBlockHeight", ethBlockHeight)
+func (a AVSProposalHandler) ExtendVoteHandler() sdk.ExtendVoteHandler {
+	return func(ctx sdk.Context, req *abci.RequestExtendVote) (resp *abci.ResponseExtendVote, err error) {
+		defer func() {
+			// catch panics if possible
+			if r := recover(); r != nil {
+				// h.logger.Error(
+				// 	"recovered from panic in ExtendVoteHandler",
+				// 	"err", r,
+				// )
+				fmt.Println("recovered from panic in ExtendVoteHandler", "err", r)
 
-	var operators = make([][]byte, 0)
-	if ethBlockHeight > 0 {
-		operators, err = a.keeper.GetOperators(ctx, ethBlockHeight)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get operator addresses: %w", err)
+				resp, err = &abci.ResponseExtendVote{VoteExtension: []byte{}},
+					fmt.Errorf("recovered application panic in ExtendVote: %v", r)
+			}
+		}()
+
+		if req == nil {
+			err := fmt.Errorf("extend vote handler received a nil request")
+			// h.logger.Error(err.Error())
+			fmt.Println(err.Error())
+			return nil, err
 		}
-	}
 
-	if len(operators) == 0 {
-		// TODO: error, or just continue? I feel error but then the chain would halt with PoA
-		return nil, errors.New("no operators found")
-	}
+		ethBlockHeight, err := a.keeper.Eth.BlockNumber(ctx)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Println("ethBlockHeight", ethBlockHeight)
 
-	ve := VoteExtension{
-		Height:    req.Height,
-		EthHeight: ethBlockHeight,
-		Operators: operators,
-	}
-	fmt.Println("ExtendVoteHandler VoteExtension", ve)
+		var operators = make([][]byte, 0)
+		if ethBlockHeight > 0 {
+			operators, err = a.keeper.GetOperators(ctx, ethBlockHeight)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get operator addresses: %w", err)
+			}
+		}
 
-	bz, err := json.Marshal(ve)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal vote extension: %w", err)
-	}
+		if len(operators) == 0 {
+			// TODO: error, or just continue? I feel error but then the chain would halt with PoA
+			return nil, errors.New("no operators found")
+		}
 
-	return &abci.ResponseExtendVote{VoteExtension: bz}, nil
+		// ve := VoteExtension{
+		// 	Height:    req.Height,
+		// 	EthHeight: ethBlockHeight,
+		// 	Operators: operators,
+		// }
+		// fmt.Println("ExtendVoteHandler VoteExtension", ve)
+
+		// bz, err := json.Marshal(ve)
+		// if err != nil {
+		// 	return nil, fmt.Errorf("failed to marshal vote extension: %w", err)
+		// }
+
+		// return &abci.ResponseExtendVote{VoteExtension: bz}, nil
+		return &abci.ResponseExtendVote{VoteExtension: nil}, nil
+	}
 }
 
-func (a AVSProposalHandler) VerifyVoteExtensionHandler(ctx sdk.Context, req *abci.RequestVerifyVoteExtension) (*abci.ResponseVerifyVoteExtension, error) {
-	var ext VoteExtension
-	err := json.Unmarshal(req.VoteExtension, &ext)
-	if err != nil {
-		// NOTE: It is safe to return an error as the Cosmos SDK will capture all
-		// errors, log them, and reject the proposal.
-		return nil, fmt.Errorf("failed to unmarshal vote extension: %w", err)
+func (a AVSProposalHandler) VerifyVoteExtensionHandler() sdk.VerifyVoteExtensionHandler {
+	return func(ctx sdk.Context, req *abci.RequestVerifyVoteExtension) (*abci.ResponseVerifyVoteExtension, error) {
+		var ext VoteExtension
+		err := json.Unmarshal(req.VoteExtension, &ext)
+		if err != nil {
+			// NOTE: It is safe to return an error as the Cosmos SDK will capture all
+			// errors, log them, and reject the proposal.
+			return nil, fmt.Errorf("failed to unmarshal vote extension: %w", err)
+		}
+
+		if ext.Height != req.Height {
+			return nil, fmt.Errorf("vote extension height does not match request height; expected: %d, got: %d", req.Height, ext.Height)
+		}
+
+		// switch {
+		// case !bytes.Equal(req.Hash, ve.Hash):
+		// 	return &abci.ResponseVerifyVoteExtension{Status: abci.ResponseVerifyVoteExtension_REJECT}, nil
+		// case len(ve.Data) != 1024:
+		// 	return &abci.ResponseVerifyVoteExtension{Status: abci.ResponseVerifyVoteExtension_REJECT}, nil
+		// }
+
+		// TODO: verify the data here (MUST be deterministic)
+
+		return &abci.ResponseVerifyVoteExtension{Status: abci.ResponseVerifyVoteExtension_ACCEPT}, nil
 	}
-
-	if ext.Height != req.Height {
-		return nil, fmt.Errorf("vote extension height does not match request height; expected: %d, got: %d", req.Height, ext.Height)
-	}
-
-	// TODO: verify the data here (MUST be deterministic)
-
-	return &abci.ResponseVerifyVoteExtension{Status: abci.ResponseVerifyVoteExtension_ACCEPT}, nil
 }
 
 func (a AVSProposalHandler) PrepareProposal(ctx sdk.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
@@ -164,7 +197,7 @@ func computeFinalizedOperators(_ sdk.Context, ci abci.ExtendedCommitInfo) ([][]b
 		}
 
 		if len(v.VoteExtension) == 0 {
-			fmt.Println("vote extension is emptym skipping", "cosmos validator", fmt.Sprintf("%x", v.Validator.Address), "with power", v.Validator.Power)
+			fmt.Println("vote extension is empty skipping", "cosmos validator", fmt.Sprintf("%x", v.Validator.Address), "with power", v.Validator.Power)
 			continue
 		}
 

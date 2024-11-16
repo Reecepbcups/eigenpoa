@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 
+	sdkavsregistry "github.com/Layr-Labs/eigensdk-go/chainio/clients/avsregistry"
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/eth"
-	eigentypes "github.com/Layr-Labs/eigensdk-go/types"
+	rpccalls "github.com/Layr-Labs/eigensdk-go/metrics/collectors/rpc_calls"
 	"github.com/Layr-Labs/incredible-squaring-avs/core/chainio"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"cosmossdk.io/collections"
 	storetypes "cosmossdk.io/core/store"
@@ -21,6 +25,7 @@ import (
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 
 	apiv1 "github.com/reecepbcups/eigenpoa/api/avs/v1"
+	"github.com/reecepbcups/eigenpoa/x/avs/keeper/manager"
 	"github.com/reecepbcups/eigenpoa/x/avs/types"
 )
 
@@ -30,7 +35,7 @@ type Keeper struct {
 	logger log.Logger
 
 	Eth    *eth.InstrumentedClient
-	EthAvs *chainio.AvsReader
+	EthAvs *chainio.AvsReader // not used
 
 	// state management
 	Schema   collections.Schema
@@ -39,6 +44,18 @@ type Keeper struct {
 	valStore baseapp.ValidatorStore
 
 	authority string
+}
+
+type Config struct {
+	ChainReader     sdkavsregistry.ChainReader
+	ServiceBindings *chainio.AvsManagersBindings
+}
+
+func NewConfig() *Config {
+	return &Config{
+		// ChainReader: sdkavsregistry.NewChainReader(),
+	}
+
 }
 
 // NewKeeper creates a new Keeper instance
@@ -67,19 +84,30 @@ func NewKeeper(
 		panic(err)
 	}
 
-	// TODO: nil -> &rpccalls.NewCollector("poa", ) ?
-	eth, err := eth.NewInstrumentedClient("http://127.0.0.1:8545", nil)
+	reg := prometheus.NewRegistry()
+	rpcCallsCollector := rpccalls.NewCollector("ethHttp", reg) // TODO: POA?
+	eth, err := eth.NewInstrumentedClient("http://127.0.0.1:8545", rpcCallsCollector)
 	if err != nil {
 		panic(err)
 	}
+
+	// I have to use the incredible-squaring-avs/ repo only i think?
+	// l, err := logging.NewZapLogger(logging.Development)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// ethAvs, err := chainio.BuildAvsReader(common.HexToAddress(c.AVSRegistryCoordinatorAddress), common.HexToAddress(c.OperatorStateRetrieverAddress), eth, l)
+	// if err != nil {
+	// panic(err)
+	// }
 
 	k := Keeper{
 		cdc:      cdc,
 		logger:   logger,
 		valStore: valStore,
 
-		Eth:    eth,
-		EthAvs: nil,
+		Eth: eth,
+		// EthAvs: ethAvs,
 
 		Params: collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 		OrmDB:  store,
@@ -123,23 +151,93 @@ func (k *Keeper) ExportGenesis(ctx context.Context) *types.GenesisState {
 	}
 }
 
-func (k *Keeper) GetOperators(ctx context.Context, ethBlockHeight uint64) ([][]byte, error) {
-	quorumNumbers := eigentypes.QuorumNums{0} // TODO: what is this?
+func getOperators(contract *bind.BoundContract, opts *bind.CallOpts, _ uint64) ([]common.Address, error) {
+	// quorumNumbers := eigentypes.QuorumNums{0} // TODO: what is this?
 
-	operatorStakes, err := k.EthAvs.GetOperatorsStakeInQuorumsAtBlock(&bind.CallOpts{Context: ctx}, quorumNumbers, uint32(ethBlockHeight))
+	// cast call 0xf5059a5d33d5853360d16c683c16e67980206f36 "getOperators()(address[])"
+
+	var out []interface{}
+	// err := contract.Call(opts, &out, "getOperatorState", registryCoordinator, quorumNumbers, height) // original
+	err := contract.Call(opts, &out, "getOperators") // TODO: the cast works, but not the go bind call. need to play around with
 	if err != nil {
-		fmt.Printf("Error fetching operator stake %v\n", err)
-		return nil, fmt.Errorf("error fetching operator stake: %w", err)
+		return *new([]common.Address), err
 	}
 
-	if len(operatorStakes) == 0 {
-		return nil, fmt.Errorf("no operators found")
+	fmt.Println("out0", out[0])
+
+	out0 := *abi.ConvertType(out[0], new([]common.Address)).(*[]common.Address)
+	// print out0
+	fmt.Println("out0", out0)
+	return out0, err
+}
+
+func (k *Keeper) GetOperators(ctx context.Context, ethBlockHeight uint64) ([][]byte, error) {
+
+	address := common.HexToAddress("0xf5059a5d33d5853360d16c683c16e67980206f36") // set in state, gather on setup
+	// instance, err := stake_registry.NewStakeRegistry(address, k.Eth)
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	m, err := manager.NewManager(address, k.Eth)
+	if err != nil {
+		fmt.Printf("Error creating manager %v\n", err)
+		return nil, fmt.Errorf("error creating manager: %w", err)
 	}
+
+	// TODO: I need to get all... how plz
+	// weight, err := instance.GetOperatorWeightAtBlock(, common.HexToAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"), uint32(ethBlockHeight))
+	// if err != nil {
+	// 	fmt.Printf("Error fetching operator weight %v\n", err)
+	// 	return nil, fmt.Errorf("error fetching operator weight: %w", err)
+	// }
+
+	// instance.GetOperators
+
+	// read from operatorStateRetriever
+
+	opts := &bind.CallOpts{Context: ctx}
+	// registryCoordinatorAddr := ""
+
+	// read from escaped sequence manager.ManagerMetaData.ABI
+	// r := strings.NewReader(manager.ManagerMetaData.ABI)
+	// contractABI, err := abi.JSON(r)
+	// if err != nil {
+	// 	fmt.Printf("Error reading abi %v\n", err)
+	// 	return nil, fmt.Errorf("error reading abi: %w", err)
+	// }
+
+	ops, err := m.GetOperators(opts)
+	if err != nil {
+		fmt.Printf("Error fetching operators %v\n", err)
+		return nil, fmt.Errorf("error fetching operators: %w", err)
+	}
+
+	// address common.Address, abi abi.ABI, caller ContractCaller, transactor ContractTransactor, filterer ContractFilterer
+	// b := bind.NewBoundContract(address, contractABI, m., m.ManagerTransactor, m.ManagerFilterer)
+
+	// v, err := getOperators(b, opts, ethBlockHeight)
+
+	// k.EthAvs.GetOperatorsStakeInQuorumsAtBlock // ideally we use this but too confusing how to setup for me rn. (EthAvs config)
+
+	fmt.Println("OPERATORS", ops, err)
+
+	operatorStakes := []string{}
+	// operatorStakes, err := k.EthAvs.GetOperatorsStakeInQuorumsAtBlock(&bind.CallOpts{Context: ctx}, quorumNumbers, uint32(ethBlockHeight))
+	// operatorStakes, err := k.EthAvs.GetOperatorsStakeInQuorumsAtBlock(&bind.CallOpts{Context: ctx}, quorumNumbers, uint32(ethBlockHeight))
+	// if err != nil {
+	// 	fmt.Printf("Error fetching operator stake %v\n", err)
+	// 	return nil, fmt.Errorf("error fetching operator stake: %w", err)
+	// }
+
+	// if len(operatorStakes) == 0 {
+	// 	return nil, fmt.Errorf("no operators found")
+	// }
 
 	operators := make([][]byte, 0, len(operatorStakes))
-	for _, operator := range operatorStakes {
-		operators = append(operators, operator[0].Operator.Bytes())
-	}
+	// for _, operator := range operatorStakes {
+	// 	operators = append(operators, operator[0].Operator.Bytes())
+	// }
 	return operators, nil
 }
 
